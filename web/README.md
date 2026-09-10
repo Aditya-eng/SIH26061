@@ -131,3 +131,5 @@ The three uploaded files are preserved unchanged in `docs/references/`. The new 
 ## Verification
 
 The automated checks cover energy conservation, battery efficiency and limits, finite fuel, minimum generator loading, priority shedding, same-seed reproducibility, identical measured inputs for both controllers, 96-hour blizzard, unexpected renewable lull, immediate fault/restoration replanning, zero-resource conditions, CSV completeness, invalid inputs and a full 210-day simulation. Browser visual and end-to-end tests have not been performed in this delivery. Optional WebMCP tools are feature-detected; a supported browser context was unavailable for validation.
+
+Note: on Vercel set the project Root Directory to `web`; this file is read relative to it.
