@@ -1,135 +1,85 @@
 # Pink Monster — Polar Mission Console
 
-**SIH26061 · Fuel-Survivability Energy Management · Internal hackathon demo**
+**SIH26061 · Fuel-survivability energy management · Team Pink Monster**
 
-A working, offline-capable browser simulation for a polar research station. Configure resources, compare a reactive controller with a forecast planner, inject disruptions, inspect hourly decisions and export the complete run.
+**Live:** https://aditya-eng.github.io/SIH26061/
 
-This internal-round build demonstrates the proposed workflow. It uses seeded synthetic weather and synthetic forecast ranges. **Trained ML, analysis of validated data and final performance claims are reserved for the final build.** The supplied CSV and presentation are draft reference material, not validation evidence.
+An offline browser console for a polar research station. Configure solar, wind, battery and fuel,
+compare a rule-based controller with a forecast planner, break things on purpose, inspect every
+hourly decision and export the run.
 
-## Run locally
+It runs on **real Antarctic weather**: ERA5 reanalysis for India's Maitri station, hourly, from
+1 May 2023. Solar, wind and station demand come from the HIMSHAKTI engine's physics model of the
+station on that weather. Every number on screen is computed in your browser from your inputs.
 
-Install Node.js 24 LTS, extract the source, and open a terminal in the project directory:
+## Run it
+
+Node.js 20 or later:
 
 ```sh
-npm run dev
+npm run dev        # http://localhost:3000
+npm test           # 10 checks
+npm run build      # syntax, assets, and the saved example reproduces exactly
 ```
 
-Open `http://localhost:3000`. No package installation, API key, database or internet connection is required to run the local demo. Serve it over HTTP; opening `index.html` directly as a file will not reliably support JavaScript modules, workers or the example JSON.
-
-```sh
-npm test
-npm run build
-```
-
-The source is dependency-free JavaScript. `npm run build` validates JavaScript, asset paths and the precomputed example against a fresh simulation. `dist/` is the deployable application, not an intermediate folder. No TypeScript check is required in this implementation.
-
-## Live deployment
-
-The accompanying delivery includes a privately hosted demo. Judge access must be verified before that URL is used for submission. To publish from your own GitHub account:
-
-1. Create a repository and upload **the contents** of this source folder, including `.github/workflows/deploy.yml` and `dist/`.
-2. Use `main` as the default branch.
-3. In repository **Settings → Pages**, choose **GitHub Actions** as the build source.
-4. Push to `main`, or run **Deploy demo to GitHub Pages** in Actions.
-5. Open the deployment URL returned by the workflow. Check it while signed out before sending it to judges.
-
-The workflow runs simulation checks, validates assets and publishes `dist/`. Relative asset paths support a repository subpath. GitHub Pages availability depends on repository/account settings. The workflow has only contents-read, pages-write and OIDC permissions.
-
-Alternative hosts: import the repository into Vercel using the included `vercel.json`, or Netlify using `netlify.toml`. The build command is `npm run build`; output is `dist`. A static host can also serve `dist/` directly. No backend secrets are needed.
+No install step, API key, database or internet connection is needed — the weather record is
+bundled in `dist/data/maitri-2023.js`. Serve over HTTP rather than opening `index.html` directly.
 
 ## Demo flow
 
-1. Run the default 30-day mission.
-2. Compare fuel consumption, **all** unserved energy, critical shortfall and battery end energy.
-3. Open Dispatch explorer. Change the controller and hour; explain generation, battery charge/discharge, demand priorities and reserve.
-4. Open Resilience lab and run Four-day blizzard, Generator failure and Forecast misses a lull.
-5. Inspect fuel allowance, carry-forward balance and the four-hour sampling advisory.
-6. Open Model & guide, then export Hourly CSV and Full run JSON.
+1. Run the default 30-day mission (1–30 May 2023, 6,300 L tank).
+2. Compare fuel, all unserved energy, critical shortfall and end battery for both controllers.
+3. Open **Dispatch explorer**: pick an hour and a controller; read the power balance, the
+   priority panel and the reason for the decision.
+4. Open **Resilience lab** and run the blizzard, generator failure and missed-lull tests. Each is
+   placed at the most demanding point of the mission; both controllers are shown side by side.
+5. Check the fuel allowance, carry-forward and the four-hour sampling advisory.
+6. Open **Model & guide**, then export the hourly CSV and full-run JSON.
 
-Use **Open companion guide** to keep instructions beside the application. The full [Markdown build guide](dist/BUILD_GUIDE.md) includes a voiceover script, architecture, assumptions and the submission checklist.
+The full narrated walkthrough is in [`dist/BUILD_GUIDE.md`](dist/BUILD_GUIDE.md).
 
-## Capabilities
+## What is in the model
 
-| Requirement | Internal-round implementation |
+| Part | Implementation |
 |---|---|
-| Station resources | Solar, wind, battery energy/power, initial charge, fuel and 1–210 mission days |
-| Weather and demand | Deterministic seed, stylised solar/wind, cold-dependent demand, illustrative snow/icing factors |
-| Diesel | 60 / 125 kW units; one active; 30% minimum loading; finite-tank fuel accounting |
-| Battery | 15–95% SOC, charge/discharge limits, 95% efficiency in each direction |
-| Rules controller | Measured net load and battery thresholds |
-| Forecast planner | Approximate 36-hour, width-14 beam search; refresh every 6 hours and on detected availability changes |
-| Load priorities | Critical 50%, essential 30%, domestic 20%; unmet energy disclosed separately |
-| Fuel survivability | Remaining tank, initial allowance, carry-forward and revised daily allowance |
-| Reserve | Synthetic forecast ranges, selectable battery reserve targets and one-hour headroom |
-| Sampling | Advisory four-hour window; does not reschedule a real load |
-| Disruption tests | Blizzard, 125 kW unit failure and missed renewable lull |
-| Inspection | Fuel chart, comparison table, hourly chart, power balance and explanations |
-| Export | Actual computed hourly CSV and complete JSON including configuration and model version |
-| Offline use | Local HTTP server; no external assets, APIs or runtime dependencies |
+| Weather | ERA5 reanalysis, hourly, Maitri (−70.75, 11.75) |
+| Solar / wind | Engine physics model per installed kW × your capacities (snow cover, cold air density, icing included) |
+| Demand | Engine physics model: headcount, heat loss at measured temperature, snow-melt water, 20 kW science and life safety |
+| Priorities | Critical, essential, domestic from the model; shed domestic first, critical last |
+| Diesel | 60 / 125 kW units, one active, 30% minimum load, finite tank |
+| Battery | 15–95% charge, power limit, 95% efficiency each way |
+| Rules controller | Hourly reaction to measured demand, renewables and battery thresholds |
+| Forecast planner | 36-hour, width-14 beam search; re-plans every 6 h and on generator faults; protection layer starts a generator if a measured shortfall exceeds the plan |
+| Forecast | Persistence from the real record: latest wind, same-hour-yesterday solar and demand |
+| Stress tests | Blizzard (96 h), 125 kW failure (48 h), missed wind lull (48 h), each at the mission's most demanding point |
+| Export | Hourly CSV and full JSON with configuration, data source and model version |
 
-## Important scope boundaries
+The planner is an approximate search, not a proof of optimality — the full HIMSHAKTI engine in
+`../engine` uses trained forecasts and a mixed-integer optimiser. See
+[`docs/FINAL_ML_INTEGRATION.md`](docs/FINAL_ML_INTEGRATION.md) for how the two connect.
 
-- The planner is approximate beam search, **not** MILP or a globally optimal solution.
-- Synthetic forecasts are derived from the generated weather with perturbations. They are not independent trained predictions. The blizzard is anticipated; the missed-lull test explicitly introduces forecast failure.
-- No ERA5 ingestion, pvlib pipeline, trained LightGBM, PuLP/HiGHS solver, sensors or equipment-control connection is present.
-- Fuel allowances are advisory and influence a soft scarcity cost; they are not a hard daily cap. Reserve is a heuristic, not a reliability guarantee.
-- The controller comparison does not force equal ending battery energy. Read fuel differences alongside all unmet energy and terminal battery energy.
-- The station and generator parameters are illustrative. There is no frequency/transient model, generator start delay, ramping constraint, minimum up/down time, thermal network, cold battery derating or multi-year reliability evaluation.
-- This is a hackathon simulation, not equipment-control software.
-
-See [final ML integration plan](docs/FINAL_ML_INTEGRATION.md) for the final-round boundary.
+This is decision support for a hackathon demonstration. It does not control station equipment.
 
 ## Project map
 
 ```text
 dist/
-  index.html                  App entrypoint
-  app.js                      Dashboard, charts, guide, controls and exports
-  style.css                   Responsive pink / navy interface
-  simulation.js               Physical model, forecasts, controllers and accounting
-  worker.js                   Background simulation
-  data/default-run.json       Reproducible starting example, computed by the engine
-  BUILD_GUIDE.md               Companion guide and narrated-demo script
-scripts/
-  serve.mjs                   Local static server
-  check.mjs                   Syntax, assets and example consistency checks
-tests/simulation.test.mjs     Energy, fuel, limits, scenarios and reproducibility
-docs/
-  FINAL_ML_INTEGRATION.md      Final-round data / ML / solver plan
-  references/                 Original uploaded guide, CSV and six-slide concept PPT
-.github/workflows/deploy.yml  GitHub Pages deployment
-vercel.json                  Vercel static deployment
-netlify.toml                 Netlify static deployment
+  index.html               entry point
+  app.js                   views, charts, explanations, exports
+  style.css                interface theme (Figtree bundled in fonts/)
+  simulation.js            weather and forecast from the record, dispatch, controllers, accounting
+  worker.js                runs the simulation off the UI thread
+  data/maitri-2023.js      hourly station record (engine/export_demo_weather.py)
+  data/default-run.json    the example shown on load, produced by the current code
+  vendor/motion.js         Motion animation library (MIT), bundled for offline use
+  BUILD_GUIDE.md           step-by-step demo guide and voiceover
+scripts/   serve.mjs (local server), check.mjs (build checks)
+tests/     simulation.test.mjs
+docs/      FINAL_ML_INTEGRATION.md
 ```
 
-## Submission checklist
+## Deploy
 
-- [x] Working demo source, instructions and deployment configuration.
-- [x] Complete Markdown build guide and voiceover script.
-- [x] Supplied six-slide concept PPT included under `docs/references/`.
-- [ ] Review the final **six-slide PPT**. Replace provisional performance claims with the demonstrated internal-round scope. The guide provides a corrected speaking outline.
-- [ ] Record a **video of the actual app with voiceover**, upload it and put its accessible link below. A script is included; a recorded video is not included in this package.
-- [ ] Publish or upload the source to the team's own **GitHub repository**. This package does not create a GitHub repository on your behalf.
-- [ ] Add the **live deployment link**, verify judge access and check whether software-track bonus criteria apply.
-- [ ] Add screenshots and any other organizer-required resources. Include hardware diagrams only if hardware is part of the submission.
-- [ ] Fill Team ID and member roles; confirm the organizer's deadline and year directly.
-
-| Submission field | Team to complete |
-|---|---|
-| Team ID | Pending |
-| Members and roles | Pending |
-| GitHub repository | Pending |
-| Final six-slide PPT | Pending review of supplied concept deck |
-| Narrated application video | Pending recording |
-| Judge-accessible live URL | Pending access verification |
-| Organizer deadline | Confirm directly |
-
-## Source material
-
-The three uploaded files are preserved unchanged in `docs/references/`. The new simulation does not train on or replay the draft CSV. Historical figures in those references are not reproduced as this demo's performance claims. The deck's listed final stack and research references inform the proposed direction, but those integrations are not represented as implemented here.
-
-## Verification
-
-The automated checks cover energy conservation, battery efficiency and limits, finite fuel, minimum generator loading, priority shedding, same-seed reproducibility, identical measured inputs for both controllers, 96-hour blizzard, unexpected renewable lull, immediate fault/restoration replanning, zero-resource conditions, CSV completeness, invalid inputs and a full 210-day simulation. Browser visual and end-to-end tests have not been performed in this delivery. Optional WebMCP tools are feature-detected; a supported browser context was unavailable for validation.
-
-Note: on Vercel set the project Root Directory to `web`; this file is read relative to it.
+GitHub Actions publishes `dist/` to GitHub Pages on every push to `main`
+(`.github/workflows/deploy-demo.yml` at the repository root). Netlify (`netlify.toml`, base
+`web`) and Vercel (`vercel.json`, Root Directory `web`) also work.

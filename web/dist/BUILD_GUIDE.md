@@ -1,226 +1,165 @@
-# Pink Monster — Internal-Round Build & Demo Guide
+# Pink Monster — Build & Demo Guide
 
-**Project:** Fuel-Survivability Energy Management  
-**Problem statement:** SIH26061  
-**Team:** Pink Monster  
-**Stage:** Internal hackathon prototype
+**Project:** Fuel-survivability energy management for polar research stations
+**Problem statement:** SIH26061 (Ministry of Earth Sciences / NCPOR)
+**Team:** Pink Monster
+**Weather:** ERA5 reanalysis, India's Maitri station, from 1 May 2023
 
-## 1. What this demo is meant to show
+## 1. What this demo shows
 
-Show how an offline decision-support console can coordinate diesel, solar, wind and battery resources to protect critical station loads until resupply. The internal round demonstrates the workflow and simulated decisions. **ML model training, analysis of validated data and final performance evaluation will be done for the final build.**
+An offline decision-support console that coordinates diesel, solar, wind and a battery to keep
+critical station loads supplied until the next fuel delivery. Everything runs on real hourly
+Antarctic weather, and every number on screen is computed in the browser from your inputs.
 
-The supplied guide and six-slide concept presentation define the product direction. The supplied hourly CSV is an unfinished earlier example. It is preserved as reference material, not treated as training data, ground truth or a validated benchmark.
+| Input | Source |
+|---|---|
+| Weather (temperature, wind, sunlight) | ERA5 reanalysis (ECMWF/Copernicus), hourly, Maitri grid point −70.75, 11.75 |
+| Solar output | Plane-of-array model at 70° tilt with snow cover on the panels, scaled to the solar capacity you enter |
+| Wind output | Turbine power curve corrected for cold, dense air and blade icing, scaled to the wind capacity you enter |
+| Station demand | Physics model: headcount, building heat loss at the measured temperature, snow melting for water, a constant 20 kW science and life-safety load |
 
-The app has four views: Mission overview, Dispatch explorer, Resilience lab and Model & guide. Use the companion-guide button on desktop to place instructions beside the app.
+The four views are Mission overview, Dispatch explorer, Resilience lab and Model & guide.
 
-## 2. Run the actual application
+## 2. Run it
 
-Use Node.js 24 LTS. From the extracted source directory:
+Node.js 20 or later. From the `web/` folder:
 
 ```sh
-npm run dev
+npm run dev        # http://localhost:3000
+npm test           # 10 checks: energy, fuel, limits, priorities, faults, real-data guards
+npm run build      # syntax, assets, and the saved example reproduces exactly
 ```
 
-Open `http://localhost:3000`. No dependency installation or API key is required. The application must be served over HTTP rather than opened as a `file://` page. Local execution needs no internet once the files and Node.js are available.
+Serve over HTTP; opening `index.html` as a `file://` page will not load the modules or data.
+No internet connection, API key or install step is needed — the weather is bundled.
 
-```sh
-npm test
-npm run build
-```
-
-`npm run build` checks syntax, local assets and consistency of the starting example with the current engine. Deploy `dist/`. This implementation uses JavaScript, so the earlier guide's TypeScript-specific commands do not apply.
-
-## 3. Demonstration, step by step
+## 3. The demonstration, step by step
 
 ### A. Configure and run
+Defaults: 30 days from 1 May 2023, 6,300 L of fuel, 80 kW solar, 100 kW wind, a 400 kWh battery
+with a 100 kW power limit, 65% starting charge, Balanced reserve, Polar winter.
 
-Start with 30 days, 16,000 litres of fuel, 80 kW solar, 100 kW wind, a 400 kWh battery, a 100 kW battery power limit, 65% initial SOC and seed 61. Leave the reserve setting at Balanced and choose Polar winter.
+The 6,300 L tank is deliberately tight: just under what the rule-based controller burns in an
+ordinary 30-day winter at this station, so fuel is a real constraint.
 
-Click **Run simulation**. The simulator computes both controllers in a background worker. A progress message identifies the controller and mission day. Cancel preserves the last completed result.
+Click **Run simulation**. Both controllers run on exactly the same hours in a background worker
+(about 1–2 seconds). The example shown on page load was produced by the same code with the
+default inputs.
 
-Changing a setting marks the visible result as belonging to the previous run. Run again to apply the new configuration. The example initially shown on page load was produced by exactly the same simulation engine; it is not hard-coded presentation data.
+### B. Mission overview
+Fuel left, critical demand served, all unmet demand and the battery at the end. The chart compares
+both controllers against a straight-line fuel budget; the table adds unmet energy by priority and
+end-of-mission battery energy. Read fuel together with shortages and the battery — a controller
+that saves fuel by shedding load has not saved anything.
 
-### B. Explain the mission overview
+At the defaults the rule-based controller runs the tank dry and sheds essential and domestic
+demand; the forecast planner finishes with fuel to spare and nothing shed.
 
-Read fuel at the end of the mission, critical demand served, all unmet demand and battery end state. The chart compares the two controllers with a straight-line fuel budget trajectory.
+### C. Dispatch explorer
+Move the hour slider and pick a controller. Each hour shows solar, wind, the active diesel unit and
+battery flow against demand, the plain-English reason for the decision, and whether the planner
+re-planned. The priority panel shows that hour's critical, essential and domestic demand from the
+station model and any shortage in each. Domestic demand is shed first, then essential, critical
+last.
 
-The comparison table reports both controllers' fuel use, all unmet energy, critical unmet energy and final stored battery energy. Do not announce a fuel advantage without these other quantities. Ending batteries are not constrained to be equal. A lower fuel result is an outcome of this synthetic run, not validated operational savings.
+The forecast panel shows what the planner expected: wind as last measured when the plan was made,
+solar as the same hour the day before, with a planning band that widens from 10% to 30% over
+36 hours.
 
-### C. Inspect the dispatch
+### D. Fuel budgeting
+The starting daily allowance is fuel divided by mission days. Unused allowance carries forward;
+the revised allowance is remaining fuel over remaining time. The planner applies a scarcity cost
+from it — advisory, not a hard cap.
 
-Open **Dispatch explorer** and move the hour slider. Select either controller.
+### E. Resilience lab
+Each button re-runs both controllers with one thing broken. Each disruption is placed at the most
+demanding point of the mission, found from the real data:
 
-Show solar, wind, the active diesel unit and battery charge/discharge. Match these against station demand, served demand and curtailment. Read the dispatch explanation and whether the planner refreshed at that hour.
-
-Positive battery power supplies demand. Negative power charges the battery. The battery panel shows stored energy, SOC, its 15–95% operating band and the selected reserve target. Headroom is an instantaneous one-hour capacity estimate, not an outage probability or firm reliability margin.
-
-The three priority rows show shortages for critical, essential and domestic demand. Domestic demand is shed first when supply is insufficient, then essential, then critical.
-
-### D. Explain fuel budgeting
-
-The starting daily allowance equals initial fuel divided by mission days. The cumulative unused allowance is carried forward. A negative carry-forward balance means fuel has been spent ahead of the original budget.
-
-The revised daily allowance is fuel remaining at the start of the selected hour divided by remaining mission time, with a one-day minimum denominator. The planner applies a soft scarcity cost using remaining fuel. The daily allowance is advisory rather than a hard dispatch constraint.
-
-### E. Run disruption scenarios
-
-Open **Resilience lab**. Each stress-test button computes a fresh run for both controllers using current station settings.
-
-| Scenario | What changes | What to inspect |
+| Test | What changes | Where it is placed |
 |---|---|---|
-| Polar winter | Synthetic low solar, variable wind and cold-dependent demand | Normal dispatch and fuel profile |
-| Four-day blizzard | Solar and wind are zero for 96 hours | Diesel dependence, fuel use and battery reserve |
-| Generator failure | The 125 kW unit is unavailable for 48 hours; the 60 kW unit remains | Restricted capacity, shortfalls and fault-triggered replanning |
-| Forecast misses a lull | Actual wind falls to 3% for 48 hours; the synthetic forecast misses the drop | Forecast optimism, reserve changes and shortages |
+| Polar winter | Nothing — real weather as recorded | — |
+| Four-day blizzard | Solar and wind drop to zero for 96 hours | the highest-demand 96 hours |
+| Generator failure | The 125 kW unit is out for 48 hours; the 60 kW unit remains | where demand most exceeds wind and solar |
+| Forecast misses a lull | Wind falls to 3% for 48 hours; the forecast still expects normal wind | where wind is normally strongest |
 
-The disruption begins at hour `min(240, floor(total_hours / 3))`. Its end is capped by mission duration. Therefore short missions truncate the nominal 96- or 48-hour disruption. The UI displays the actual window.
+The results table shows both controllers side by side: critical, essential and domestic energy
+lost, fuel left, and when the first critical shortfall happened. At the default station every test
+costs something, and the planner loses less than the rule-based controller in each.
 
-The simplified blizzard forecast anticipates the loss of renewables. Generator faults become known when detected at the hourly boundary. The planner then assumes the observed equipment availability persists over its horizon; recovery is not known in advance. The missed-lull scenario is intentionally optimistic.
+### F. Sampling-window advisory
+The best four-hour window on the first day by forecast renewable margin — a suggestion for when an
+air-sampling task would be least affected by generator exhaust. It does not move a real task.
 
-### F. Show the sampling advisory
-
-The console suggests the best four-hour period in the first day using the largest average lower-range renewable margin after station demand. It labels a negative margin explicitly.
-
-This suggests when an operator could examine a sampling task. It does not create a new sampling load or actually move a task. A full flexible-load scheduler belongs in the final build.
-
-### G. Export and explain the limits
-
-Download **Hourly CSV** and **Full run JSON**. Exports contain the latest completed run, not settings that have not yet been applied. The JSON includes the actual configuration, model version, disruption window, both controllers and summary results.
-
-Open **Model & guide**. Explain what the internal prototype implements and what the final-round architecture will add. The model is not connected to physical equipment.
+### G. Exports
+**Hourly CSV** and **Full run JSON** contain the latest completed run: every hour, both
+controllers, the configuration, the disruption window and the data source.
 
 ## 4. Implemented model
 
-| Component | Behavior |
+| Component | Behaviour |
 |---|---|
-| Duration | 1–210 days, one-hour steps |
-| Weather | Seeded synthetic short daylight, variable wind and temperature |
-| Demand | Base station demand, daytime increase and temperature-dependent increase |
-| Snow / icing | Illustrative fixed factors: solar 0.72, wind 0.82 |
-| Solar / wind | Adjustable nameplate capacities; output cannot be negative |
-| Diesel | One of 60 / 125 kW units; minimum output 30% of rating |
-| Fuel model | 60 kW: `2.1 + 0.24 × P` L/h; 125 kW: `3.5 + 0.25 × P` L/h |
-| Empty / low tank | Generator output is limited by fuel; it switches off if the fuel cannot support minimum output for one hour |
-| Battery | 15–95% SOC; energy and power constraints; 95% charge and 95% discharge efficiency |
-| Load shares | Critical 50%, essential 30%, domestic 20% |
-| Rules | Measured demand and renewables; SOC thresholds and generator hysteresis |
-| Planner | Width-14 beam search, seven discrete generator actions, 36-hour horizon |
-| Replanning | Every six hours, plus detected generator availability changes |
-| Objective | Strong shortage penalties by priority, fuel scarcity, starts and heuristic reserve costs |
-| Reserve targets | Lean 25%, balanced 35%, conservative 45% of battery capacity |
-| Exports | Actual values, not rounded dashboard numbers |
-
-Hourly electrical balance:
+| Duration | 1–210 days from 1 May 2023, one-hour steps |
+| Weather | ERA5 reanalysis, hourly |
+| Solar / wind | Physics model output per installed kW × the capacity you enter |
+| Demand | Physics model; tiers from the model: ~24% critical, ~65% essential, ~11% domestic on average |
+| Diesel | One of 60 / 125 kW; minimum output 30% of rating |
+| Fuel curves (assumed) | 60 kW: `2.1 + 0.24 × P` L/h; 125 kW: `3.5 + 0.25 × P` L/h |
+| Low tank | Output limited by fuel; the unit stops if it cannot run at minimum load for an hour |
+| Battery | 15–95% state of charge; power limit; 95% charge and discharge efficiency |
+| Rules controller | Reacts every hour to measured demand, renewables and battery thresholds |
+| Forecast planner | Width-14 beam search over seven generator actions, 36 hours ahead; re-plans every 6 hours and on any change in generator availability |
+| Protection layer | If the measured shortfall exceeds what the plan and battery can supply, the smallest suitable generator starts and the plan is redone |
+| Forecast | Persistence: wind as last measured, solar and demand as the same hour yesterday |
+| Reserve targets | Lean 25%, Balanced 35%, Conservative 45% of battery capacity |
 
 ```text
-PV + wind + diesel + battery discharge
-    = served load + battery charge + curtailment
-
+PV + wind + diesel + battery discharge = served demand + battery charge + curtailment
 E_next = E + 0.95 × charge − discharge / 0.95
 ```
 
-Because the interval is one hour, the numerical kW flow corresponds to kWh for that interval. Energy losses are tracked separately. Charging and discharging cannot occur simultaneously in the model.
+The planner's shortage penalties are 10,000,000 / 100,000 / 10,000 per kWh for critical /
+essential / domestic demand. It is an approximate search, not a proof of optimality; the full
+HIMSHAKTI engine uses a mixed-integer optimiser.
 
-The planner shortage weights are 10,000,000 / 100,000 / 10,000 per kWh for critical / essential / domestic demand. These are weighted penalties, not a mathematical lexicographic or global-optimality guarantee. Approximate search can make imperfect choices. The UI does not assume the planner always wins.
+Not modelled: sub-hour frequency, the heat network, ramp rates, start delays, minimum up/down
+time, cold battery derating, sensor feedback or equipment control. This is decision support,
+not a controller for station equipment.
 
-## 5. What remains for the final build
+## 5. Relationship to the full engine
 
-The internal round does not contain ERA5 ingestion, pvlib-based physical forecasting, trained LightGBM, a MILP solver, sensors or hardware control. Forecast ranges are synthetic and use the generated weather as their starting point. They are not independently trained ML forecasts or calibrated confidence intervals.
+The HIMSHAKTI engine (`../engine`) runs the same station on ERA5 2015–2023 with trained LightGBM
+quantile forecasts, a mixed-integer optimiser and a seasonal fuel allocator. This browser demo
+uses the engine's weather and physics so it can respond live; its planner and forecast are
+deliberately simpler. Quote engine results from the engine and demo results from the demo.
 
-The proposed final stack in the PPT is Python, ERA5, pvlib, LightGBM, PuLP + HiGHS and Plotly. It is a roadmap, not a description of this browser implementation. Keeping the demo independent of that stack makes the internal workflow usable now while data and model evaluation remain unfinished.
+## 6. Suggested voiceover (about three minutes)
 
-Final-round work:
+**0:00–0:25 — Problem.** “A polar station gets fuel once a year. Pink Monster decides how to spend
+it so critical power never runs out. This is real Antarctic weather — ERA5 for India's Maitri
+station, May 2023.”
 
-1. Establish the station location, weather time zone, equipment ratings, load categories and resupply horizon.
-2. Calibrate generator fuel curves, renewable derating and battery behavior against credible station or equipment data.
-3. Ingest historical weather and measured loads, recording provenance, missing data and units.
-4. Train independent forecasts. Use chronological train / validation / held-out year splits. Avoid future-data leakage.
-5. Evaluate forecast error and quantile coverage before using ranges to size reserves.
-6. Implement a formal solver with generator constraints, fuel budgets, battery bounds and flexible task timing.
-7. Compare controllers on identical scenarios, disclose all load shortfalls and account for final battery energy.
-8. Test several weather years, seeds, blizzards, unexpected lulls and equipment faults.
-9. Validate operator decisions, then a low-voltage bench prototype if hardware is part of the submission.
+**0:25–0:55 — Run and compare.** “Same month, same weather, two controllers. The rule-based one
+runs the tank dry and sheds load; the forecast planner finishes with fuel left and nothing shed.”
 
-Not modeled here: subhour stability and frequency, thermal networks, ramp rates, start delays, minimum up/down time, cold battery derating, actual sensor feedback or physical actuation. It is not safe to use this prototype to control station equipment.
+**0:55–1:30 — An hour up close.** “Here is any hour: what the wind and sun gave, what the battery
+and diesel did, and why. Critical loads are protected last.”
 
-## 6. Suggested voiceover for the real app recording
+**1:30–2:10 — Bad days.** “A four-day blizzard at the worst moment of the month. Both controllers
+lose power; the planner loses less. The same holds when the big generator fails or the forecast
+misses a lull.”
 
-Record the actual application, not a slideshow of screenshots. Aim for approximately three minutes. Rehearse once so the controls and exports work on the recording machine. Keep narration consistent with the numbers on screen rather than reading provisional totals from the draft PPT.
+**2:10–2:35 — Exports.** “Every hourly decision exports as CSV, the whole run as JSON.”
 
-**0:00–0:25 — Problem and configuration**
+**2:35–3:00 — The full engine.** “Behind this sits the HIMSHAKTI engine: trained forecasts and an
+optimiser over nine years of weather.”
 
-“Pink Monster is a fuel-survivability energy management concept for polar research stations. The aim is to coordinate diesel, renewables and battery reserve while keeping critical loads supplied until resupply. This internal-round prototype uses synthetic inputs to demonstrate the workflow. Here I can change the mission duration, available fuel and station resources.”
+## 7. Code map
 
-**0:25–0:55 — Run and comparison**
-
-“I am running the same mission with two controllers. The rules controller reacts to current demand and battery charge. The forecast planner searches a 36-hour schedule and refreshes it every six hours. We compare fuel use together with all unmet demand, critical shortages and the battery's final energy. These are computed simulation outcomes, not validated field results.”
-
-**0:55–1:30 — Hourly dispatch and fuel budget**
-
-“The dispatch explorer shows exactly what happened in each hour. Renewable power, diesel and the battery balance the station's served demand. The battery has energy, power and state-of-charge limits. When available supply is insufficient, domestic demand is reduced before essential and critical demand. This panel also shows the fuel allowance, carry-forward balance and available reserve.”
-
-**1:30–2:10 — Disruption**
-
-“Now I will run the four-day blizzard. Solar and wind become zero during the disruption window. The resulting fuel and battery changes are calculated by the model. The other scenarios remove the larger generator or make the forecast miss a renewable lull. We inspect the actual shortfalls instead of assuming the planner always succeeds.”
-
-**2:10–2:35 — Advisory and exports**
-
-“The console offers a four-hour sampling-window advisory using the renewable forecast margin. It does not yet schedule a real sampling load. I can export every hourly decision as CSV and the full configuration and results as JSON, so this run can be inspected and reproduced.”
-
-**2:35–3:00 — Final-round path**
-
-“For this internal round, the working contribution is the console, physical simulation, controller comparison and resilience testing. Validated weather ingestion, trained ML forecasts, formal optimisation and hardware validation are the next stage. The model screen makes this boundary clear.”
-
-A narrated video has not been generated in this package. The team must record and attach the actual app demonstration.
-
-## 7. Six-slide PPT alignment
-
-The uploaded PPT already contains six slides. Its overall problem → solution → technical approach → feasibility → impact → references structure fits the demo. Keep that structure while distinguishing proposed final components from internal-round functions.
-
-| Slide | Internal-round message and demo alignment |
-|---|---|
-| 1 · Problem | Fuel-survivability EMS for polar research stations; SIH26061; Team Pink Monster |
-| 2 · Proposed solution | Fuel allowance, renewable forecast ranges, diesel / battery decisions and load priorities |
-| 3 · Technical approach | Show the actual browser simulator and approximate 36h / 6h planner. Label Python / ERA5 / LightGBM / MILP as the proposed final stack |
-| 4 · Feasibility | Working offline simulation, configurable equipment and disruption tests; data and hardware validation remain future work |
-| 5 · Demonstrated outcomes | Use a screenshot of one current run and its exact configuration. Show fuel, all shortages and end battery together. Do not use the provisional 210-day / 8,615 L figure as an internal-round result |
-| 6 · References and next steps | Keep relevant research / method references from the concept deck; label implementation status. Do not cite the absent technical brief as available evidence |
-
-The original concept PPT is preserved unchanged in `docs/references/`. It is not relabeled as a completed or validated final deck. The absent `SIH_HANDOFF_BRIEF_claude.md` mentioned in its references was not supplied and was not used.
-
-## 8. GitHub and live deployment
-
-Upload the full source-folder contents to the team's own GitHub repository. For GitHub Pages, choose GitHub Actions in the repository's Pages settings and run the included deployment workflow on `main`. The workflow tests the engine and publishes `dist/`.
-
-Vercel and Netlify configuration files are also included. Both use `npm run build` and output `dist`. No backend credentials are required. Verify any hosted URL from a signed-out browser before promising access to judges. The privately hosted review demo may require your account.
-
-Recommended repository content:
-
-- Complete source and README.
-- Final **six-page / six-slide PPT**.
-- Link to the recorded application demo **with voiceover**.
-- Live deployment link for any software-track bonus.
-- Screenshots, this build guide and actual exported runs.
-- Team ID and member roles.
-- Hardware diagrams only if the chosen submission includes hardware.
-
-Confirm additional organizer requirements, deadline and year directly. Do not mark the PPT review, recording or judge-access check as complete until the team actually performs them.
-
-## 9. Code map and verification
-
-- `dist/simulation.js`: deterministic weather, forecast assumptions, dispatch physics, planner, accounting and CSV generation.
-- `dist/worker.js`: runs the model outside the UI thread.
-- `dist/app.js`: all four views, controls, SVG charts, explanations, guide and downloads.
-- `dist/style.css`: responsive navy / pink interface.
-- `dist/data/default-run.json`: starting run produced by the current engine.
-- `scripts/serve.mjs`: local HTTP server.
-- `scripts/check.mjs`: syntax, asset and default-run consistency checks.
-- `tests/simulation.test.mjs`: energy/fuel conservation, physical limits, priority shedding, faults, reproducibility, export and full-horizon checks.
-- `README.md`: setup, deployment and submission status.
-- `docs/FINAL_ML_INTEGRATION.md`: final-round implementation boundary.
-
-Automated checks include the zero-resource case and a 210-day mission. The model checks do not establish field reliability or substitute for browser end-to-end testing. No browser visual/end-to-end tests were performed for this delivery; optional WebMCP integration could not be validated in a supported browser context.
-
-## 10. Source provenance
-
-`Pink_Monster_Build_Guide.md`, `pink-monster-hourly.csv` and `Pink_Monster_SIH26061_Visual_Edition.pptx` are preserved unchanged under `docs/references/`. They were used to establish scope and interaction flow. This implementation does not depend on the earlier app URL or unavailable earlier source folder. It is a new, standalone internal-round demo.
+- `dist/simulation.js` — weather and forecast from the real record, dispatch physics, both controllers, accounting, CSV
+- `dist/data/maitri-2023.js` — the hourly station record (generated by `engine/export_demo_weather.py`)
+- `dist/worker.js` — runs the model off the UI thread
+- `dist/app.js` — the four views, charts, explanations, exports
+- `dist/style.css` — interface theme
+- `dist/data/default-run.json` — the example shown on load, produced by the current code
+- `scripts/check.mjs` — syntax, assets and default-run reproducibility
+- `tests/simulation.test.mjs` — conservation, limits, priorities, faults, reproducibility, real-data and stress-test guards

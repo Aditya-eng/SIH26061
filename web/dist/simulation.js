@@ -1,27 +1,46 @@
-export const MODEL_VERSION = '1.0.0';
-export const defaults = Object.freeze({days:30,solar:80,wind:100,battery:400,batteryPower:100,fuel:16000,initialSoc:65,seed:61,scenario:'normal',risk:1});
+import {STATION} from './data/maitri-2023.js';
+export const MODEL_VERSION = '2.0.0';
+export const DATA_SOURCE = STATION.source;
+export const START = STATION.start;
+export const defaults = Object.freeze({days:30,solar:80,wind:100,battery:400,batteryPower:100,fuel:6300,initialSoc:65,scenario:'normal',risk:1});
 export const scenarios = {normal:'Polar winter',blizzard:'Four-day blizzard',failure:'Generator failure',miss:'Forecast misses a lull'};
-export const limits={days:[1,210],solar:[0,500],wind:[0,500],battery:[0,2000],batteryPower:[0,500],fuel:[0,100000],initialSoc:[15,95],seed:[1,999999],risk:[0,2]};
+export const limits={days:[1,210],solar:[0,500],wind:[0,500],battery:[0,2000],batteryPower:[0,500],fuel:[0,100000],initialSoc:[15,95],risk:[0,2]};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-export function validateConfig(c){for(const [k,[a,b]] of Object.entries(limits))if(!Number.isFinite(c[k])||c[k]<a||c[k]>b)throw Error(`${k} must be between ${a} and ${b}.`);for(const k of ['days','seed'])if(!Number.isInteger(c[k]))throw Error(`${k} must be a whole number.`);if(!(c.scenario in scenarios))throw Error('Unknown scenario.');return {...c};}
-function noise(seed,h,s=0){let x=(seed*374761393+h*668265263+s*1274126177)|0;x=Math.imul(x^(x>>>13),1274126177);return ((x^(x>>>16))>>>0)/4294967296;}
-export function eventWindow(c){const start=Math.min(240,Math.floor(c.days*24/3));return {start,end:Math.min(c.days*24,start+(c.scenario==='blizzard'?96:48))};}
-export function weather(c){const rows=[];const event=eventWindow(c);for(let h=0;h<c.days*24+36;h++){
- const day=h/24,local=h%24,temperature=-27+7*Math.sin(day/7)+3*(noise(c.seed,h,1)-.5);
- const daylight=Math.max(0,Math.sin((local-9)*Math.PI/6));
- const snow=.72,icing=.82;
- const pvBase=c.solar*daylight*(.35+.35*noise(c.seed,Math.floor(h/4),2))*snow;
- const windBase=c.wind*clamp(.33+.25*Math.sin(h/19)+.12*Math.sin(h/73)+.14*(noise(c.seed,h,3)-.5),0,.9)*icing;
- const load=66+Math.max(0,-temperature-15)*1.3+(local>=7&&local<=21?10:0)+6*(noise(c.seed,h,4)-.5);
+export function validateConfig(c){for(const [k,[a,b]] of Object.entries(limits))if(!Number.isFinite(c[k])||c[k]<a||c[k]>b)throw Error(`${k} must be between ${a} and ${b}.`);if(!Number.isInteger(c.days))throw Error('days must be a whole number.');if(!(c.scenario in scenarios))throw Error('Unknown scenario.');return {...c};}
+export function eventWindow(c){
+ // Each stress test is placed at the most demanding point of this mission, from the real data.
+ const len=c.scenario==='blizzard'?96:48,last=c.days*24,H=STATION.history;
+ const score=h=>{const i=h+H,pv=c.solar*STATION.pvPerKw[i],wd=c.wind*STATION.windPerKw[i],load=STATION.load[i];
+  return c.scenario==='blizzard'?load:c.scenario==='miss'?wd:load-pv-wd;};
+ const lo=Math.min(24,Math.max(0,last-len)),hi=Math.max(lo,last-len);
+ let best=lo,run=0;for(let h=lo;h<lo+len&&h<last;h++)run+=score(h);let top=run;
+ for(let h=lo+1;h<=hi;h++){run+=score(h+len-1)-score(h-1);if(run>top){top=run;best=h;}}
+ return {start:best,end:Math.min(last,best+len)};}
+export function weather(c){
+ // Hour 0 is 1 May 2023, 00:00 UTC. STATION carries one extra day before that (history) so
+ // the forecast can look at the same hour yesterday from the very first hour.
+ const rows=[],event=eventWindow(c),H=STATION.history,n=c.days*24+36;
+ const at=(k,i)=>STATION[k][i];
+ for(let h=-H;h<n;h++){const i=h+H;
+ const pvBase=c.solar*at('pvPerKw',i),windBase=c.wind*at('windPerKw',i);
  const disruption=h>=event.start&&h<event.end;
- const outage=c.scenario==='blizzard'&&disruption;
- const lull=c.scenario==='miss'&&disruption;
- rows.push({hour:h,temperature,load,pv:outage?0:pvBase,wind:outage?0:windBase*(lull?.03:1),pvBase,windBase,largeAvailable:!(c.scenario==='failure'&&disruption),disruption:disruption&&c.scenario!=='normal'});
- }return rows;}
-export function forecast(c,actual,issue,currentAvailability){const lead=actual.hour-issue;const spread=.10+.20*Math.min(lead/36,1);const error=(noise(c.seed,actual.hour+issue,8)-.5)*spread;
- const renewable=c.scenario==='miss'?actual.pvBase+actual.windBase:actual.pv+actual.wind;
- const expected=Math.max(0,renewable*(1+error));
- return {...actual,load:actual.load*(1+.04*(noise(c.seed,actual.hour+issue,9)-.5)),pv:expected*(1-c.risk*spread*.35),wind:0,largeAvailable:currentAvailability,forecastExpected:expected,forecastLow:expected*(1-spread),forecastHigh:expected*(1+spread)};}
+ const outage=c.scenario==='blizzard'&&disruption,lull=c.scenario==='miss'&&disruption;
+ rows.push({hour:h,temperature:at('temperature',i),windSpeed:at('windSpeed',i),load:at('load',i),critical:at('critical',i),essential:at('essential',i),domestic:at('domestic',i),
+  pv:outage?0:pvBase,wind:outage?0:windBase*(lull?.03:1),pvBase,windBase,
+  largeAvailable:!(c.scenario==='failure'&&disruption),disruption:disruption&&c.scenario!=='normal'});
+ }
+ // same-hour-yesterday values, from what actually happened (base values for the missed-lull test)
+ return rows.slice(H).map((r,k)=>{const y=rows[k];return {...r,prevLoad:y.load,prevPv:y.pv,prevPvBase:y.pvBase};});}
+export function forecast(c,actual,issue,currentAvailability,issueRow=actual){
+ // Persistence forecast from the real record, no noise. Wind: the latest measurement when the
+ // plan is made. Solar and demand: the same hour yesterday. The missed-lull test keeps assuming
+ // undisturbed wind through the lull. The band widens with lead time (10% at issue to 30% at
+ // 36 h) - a stated planning margin, not a measured error.
+ const lead=actual.hour-issue;const spread=.10+.20*Math.min(lead/36,1);
+ const missing=c.scenario==='miss'&&actual.disruption;
+ const wind=missing?issueRow.windBase:issueRow.wind,solar=missing?actual.prevPvBase:actual.prevPv;
+ const expected=Math.max(0,wind+solar);
+ return {...actual,load:actual.prevLoad,pv:expected*(1-c.risk*spread*.35),wind:0,largeAvailable:currentAvailability,forecastExpected:expected,forecastLow:expected*(1-spread),forecastHigh:expected*(1+spread)};}
 export const generatorActions=[{unit:0,power:0},{unit:60,power:18},{unit:60,power:36},{unit:60,power:60},{unit:125,power:37.5},{unit:125,power:75},{unit:125,power:125}];
 export function dispatch(c,w,state,action){let unit=action.unit,p=action.power;if(unit===125&&!w.largeAvailable){unit=0;p=0;}
  const idle=unit===60?2.1:3.5,slope=unit===60?.24:.25;
@@ -33,8 +52,8 @@ export function dispatch(c,w,state,action){let unit=action.unit,p=action.power;i
  const discharge=Math.max(0,Math.min(-net,c.batteryPower,(state.energy-minE)*eta));
  const energy=clamp(state.energy+charge*eta-discharge/eta,minE,maxE);
  const unserved=Math.max(0,-net-discharge),curtailed=Math.max(0,net-charge);
- const domesticUnserved=Math.min(unserved,w.load*.2),essentialUnserved=Math.min(Math.max(0,unserved-domesticUnserved),w.load*.3),criticalUnserved=Math.max(0,unserved-domesticUnserved-essentialUnserved);
- return {hour:w.hour,load:w.load,pv:w.pv,wind:w.wind,temperature:w.temperature,generator:unit,generatorPower:p,batteryPower:discharge-charge,energy,soc:c.battery?energy/c.battery*100:0,fuelUsed,fuelRemaining:Math.max(0,state.fuel-fuelUsed),unserved,domesticUnserved,essentialUnserved,criticalUnserved,curtailed,losses:charge*(1-eta)+discharge*(1/eta-1),disruption:w.disruption,largeAvailable:w.largeAvailable};}
+ const tiers=(w.critical||0)+(w.essential||0)+(w.domestic||0),share=k=>tiers>0?(w[k]||0)/tiers:(k==='critical'?1:0);const criticalLoad=w.load*share('critical'),essentialLoad=w.load*share('essential'),domesticLoad=w.load*share('domestic');const domesticUnserved=Math.min(unserved,w.load*share('domestic')),essentialUnserved=Math.min(Math.max(0,unserved-domesticUnserved),w.load*share('essential')),criticalUnserved=Math.max(0,unserved-domesticUnserved-essentialUnserved);
+ return {hour:w.hour,load:w.load,criticalLoad,essentialLoad,domesticLoad,pv:w.pv,wind:w.wind,temperature:w.temperature,generator:unit,generatorPower:p,batteryPower:discharge-charge,energy,soc:c.battery?energy/c.battery*100:0,fuelUsed,fuelRemaining:Math.max(0,state.fuel-fuelUsed),unserved,domesticUnserved,essentialUnserved,criticalUnserved,curtailed,losses:charge*(1-eta)+discharge*(1/eta-1),disruption:w.disruption,largeAvailable:w.largeAvailable};}
 function nextState(r){return {energy:r.energy,fuel:r.fuelRemaining,unit:r.generator};}
 function rule(c,w,state){const net=w.load-w.pv-w.wind;const soc=c.battery?state.energy/c.battery:0;
  const keep=state.unit&&soc<.8;
@@ -46,7 +65,7 @@ function rule(c,w,state){const net=w.load-w.pv-w.wind;const soc=c.battery?state.
 function plan(c,ws,h,state){let beam=[{...state,cost:0,path:[]}];const horizon=Math.min(36,c.days*24-h),width=14;
  const initialE=state.energy;const allowance=state.fuel/Math.max(1,c.days-h/24)/24;
  for(let t=0;t<horizon;t++){
-  const f=forecast(c,ws[h+t],h,ws[h].largeAvailable),expanded=[];
+  const f=forecast(c,ws[h+t],h,ws[h].largeAvailable,ws[h]),expanded=[];
   for(const b of beam)for(let ai=0;ai<generatorActions.length;ai++){
    const a=generatorActions[ai];if(a.unit===125&&!f.largeAvailable)continue;
    const r=dispatch(c,f,b,a);
@@ -60,16 +79,16 @@ function plan(c,ws,h,state){let beam=[{...state,cost:0,path:[]}];const horizon=M
  }
  return beam[0].path.slice(0,6);
 }
-export function summarize(rows,c){const sum=k=>rows.reduce((a,r)=>a+r[k],0);const last=rows.at(-1);const fuelUsed=sum('fuelUsed');return {fuelUsed,fuelRemaining:last.fuelRemaining,unserved:sum('unserved'),criticalUnserved:sum('criticalUnserved'),essentialUnserved:sum('essentialUnserved'),domesticUnserved:sum('domesticUnserved'),endEnergy:last.energy,endSoc:last.soc,load:sum('load'),renewable:sum('pv')+sum('wind'),curtailed:sum('curtailed'),losses:sum('losses'),criticalHours:rows.filter(r=>r.criticalUnserved>1e-6).length,generatorHours:rows.filter(r=>r.generatorPower>0).length,firstCriticalHour:rows.find(r=>r.criticalUnserved>1e-6)?.hour??null,firstFuelEmptyHour:rows.find(r=>r.fuelRemaining<1e-6)?.hour??null,daysAtAverageBurn:fuelUsed>0?last.fuelRemaining/(fuelUsed/c.days):null};}
+export function summarize(rows,c){const sum=k=>rows.reduce((a,r)=>a+r[k],0);const last=rows.at(-1);const fuelUsed=sum('fuelUsed');return {fuelUsed,fuelRemaining:last.fuelRemaining,unserved:sum('unserved'),criticalUnserved:sum('criticalUnserved'),essentialUnserved:sum('essentialUnserved'),domesticUnserved:sum('domesticUnserved'),endEnergy:last.energy,endSoc:last.soc,load:sum('load'),criticalLoad:sum('criticalLoad'),renewable:sum('pv')+sum('wind'),curtailed:sum('curtailed'),losses:sum('losses'),criticalHours:rows.filter(r=>r.criticalUnserved>1e-6).length,generatorHours:rows.filter(r=>r.generatorPower>0).length,firstCriticalHour:rows.find(r=>r.criticalUnserved>1e-6)?.hour??null,firstFuelEmptyHour:rows.find(r=>r.fuelRemaining<1e-6)?.hour??null,daysAtAverageBurn:fuelUsed>0?last.fuelRemaining/(fuelUsed/c.days):null};}
 export function simulate(config,progress=()=>{}){const c=validateConfig(config),ws=weather(c),runs=[];
  for(const controller of ['Tuned rules','Forecast planner']){let state={energy:c.battery*c.initialSoc/100,fuel:c.fuel,unit:0},queue=[],lastAvailability=true;const rows=[];
  for(let h=0;h<c.days*24;h++){
   let replanned=false,action;
-  if(controller==='Forecast planner'){if(h%6===0||!queue.length||ws[h].largeAvailable!==lastAvailability){queue=plan(c,ws,h,state);replanned=true;}action=generatorActions[queue.shift()];}else action=rule(c,ws[h],state);
+  let protectedHour=false;if(controller==='Forecast planner'){if(h%6===0||!queue.length||ws[h].largeAvailable!==lastAvailability){queue=plan(c,ws,h,state);replanned=true;}action=generatorActions[queue.shift()];const w=ws[h],battery=Math.max(0,Math.min(c.batteryPower,(state.energy-c.battery*.15)*.95)),planned=action.unit===125&&!w.largeAvailable?0:action.power,need=w.load-w.pv-w.wind-battery;if(need>planned+1e-9){const fit=generatorActions.filter(a=>a.unit&&!(a.unit===125&&!w.largeAvailable));action=fit.find(a=>a.power>=need)||fit.at(-1);queue=[];protectedHour=true;}}else action=rule(c,ws[h],state);
   const before=state;const r=dispatch(c,ws[h],state,action);state=nextState(r);lastAvailability=ws[h].largeAvailable;
-  const f=forecast(c,ws[h],Math.floor(h/6)*6,ws[h].largeAvailable);
-  rows.push({...r,controller,replanned,forecastExpected:f.forecastExpected,forecastLow:f.forecastLow,forecastHigh:f.forecastHigh,reserveEnergy:c.battery*(.25+.1*c.risk),budgetRemaining:c.fuel*(h+1)/(c.days*24)-(c.fuel-r.fuelRemaining),dailyAllowance:before.fuel/Math.max(1,(c.days*24-h)/24),reason:r.unserved>1e-6?'Available generation and battery cannot meet all demand. Shed domestic, then essential, then critical.':r.generatorPower>0?(r.batteryPower<0?'Generator serves demand and stores excess in the battery.':'Generator and renewables support demand; the battery covers any residual.'):(r.batteryPower>0?'Renewables and battery serve demand. Diesel remains off.':'Renewables cover demand; surplus charges the battery or is curtailed.')});
+  const f=forecast(c,ws[h],Math.floor(h/6)*6,ws[h].largeAvailable,ws[Math.floor(h/6)*6]);
+  rows.push({...r,controller,replanned,protected:protectedHour,forecastExpected:f.forecastExpected,forecastLow:f.forecastLow,forecastHigh:f.forecastHigh,reserveEnergy:c.battery*(.25+.1*c.risk),budgetRemaining:c.fuel*(h+1)/(c.days*24)-(c.fuel-r.fuelRemaining),dailyAllowance:before.fuel/Math.max(1,(c.days*24-h)/24),reason:protectedHour?'Measured shortfall exceeded the plan and the battery: protection started a generator and the plan is being redone.':r.unserved>1e-6?'Available generation and battery cannot meet all demand. Shed domestic, then essential, then critical.':r.generatorPower>0?(r.batteryPower<0?'Generator serves demand and stores excess in the battery.':'Generator and renewables support demand; the battery covers any residual.'):(r.batteryPower>0?'Renewables and battery serve demand. Diesel remains off.':'Renewables cover demand; surplus charges the battery or is curtailed.')});
   if(h%24===0)progress({controller,hour:h,total:c.days*24});
  }runs.push({controller,rows,summary:summarize(rows,c)});}
- return {modelVersion:MODEL_VERSION,createdAt:new Date().toISOString(),source:'Seeded synthetic simulation',config:c,event:eventWindow(c),runs};}
+ return {modelVersion:MODEL_VERSION,createdAt:new Date().toISOString(),source:STATION.source,config:c,event:eventWindow(c),runs};}
 export function csvFor(run){const keys=Object.keys(run.runs[0].rows[0]);const q=v=>`"${String(v??'').replaceAll('"','""')}"`;return [keys.map(q).join(','),...run.runs.flatMap(r=>r.rows.map(row=>keys.map(k=>q(row[k])).join(',')))].join('\n');}
