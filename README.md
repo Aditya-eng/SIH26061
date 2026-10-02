@@ -1,4 +1,4 @@
-# SIH26061 — Polar station energy management
+# SIH26061: Polar station energy management
 
 **Smart India Hackathon 2026 · Problem Statement SIH26061 · Ministry of Earth Sciences (MoES) /
 National Centre for Polar and Ocean Research (NCPOR) · Software · Clean & Green Technology**
