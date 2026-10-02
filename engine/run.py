@@ -1,6 +1,6 @@
 """End-to-end pipeline: one command, real ERA5 in, dashboard out.
 
-    python run.py                     # default: 210-day season from the resupply date
+    python run.py                     # default: 210-day window from the resupply date (208 scored days)
     python run.py --days 60 --step 6  # fast iteration
     python run.py --full              # whole test year, all controllers, scenarios
 

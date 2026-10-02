@@ -7,6 +7,7 @@ __pycache__/
 
 # Node
 node_modules/
+web/dist/
 *.log
 
 # generated previews and scratch, not deliverables

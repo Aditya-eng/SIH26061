@@ -58,7 +58,7 @@ def load_results() -> dict:
         data = json.load(fh)
     days = data.get("meta", {}).get("run_params", {}).get("days", 0)
     if days < 100:
-        print(f"  ! warning: deck is being built from a {days}-day run, not the 210-day season")
+        print(f"  ! warning: deck is being built from a {days}-day window, not the full 210-day one")
     return data
 
 
@@ -76,6 +76,7 @@ def facts(data: dict) -> dict:
 
     return {
         "days": rp.get("days"),
+        "scored_days": (c.get("hours") or 0) / 24,
         "season": f"{str(rp.get('season_start'))[:10]} to {str(rp.get('season_end'))[:10]}",
         "horizon_h": rp.get("horizon_h"),
         "test_year": rp.get("test_year"),
@@ -445,8 +446,8 @@ def build(team: str, team_id: str, repo: str) -> Path:
         [
             ("Proposed Solution", [
                 "Two-level operating policy for a station with ONE fuel delivery a year",
-                "Outer level: Monte Carlo allocator sets a daily litre allowance that holds "
-                f"P(critical load served to the ship) ≥ {fnum(100 * (f['target'] or 0.99))}%",
+                "Outer level: Monte Carlo allocator over past winters sets a daily litre allowance, "
+                f"targeting critical load served until the ship in {fnum(100 * (f['target'] or 0.99))}% of winters",
                 "Inner level: rolling MILP re-optimises every step inside that allowance",
             ]),
             ("Detailed explanation", [
@@ -488,11 +489,11 @@ def build(team: str, team_id: str, repo: str) -> Path:
                 "Python · pandas · NumPy · pvlib (PV physics) · LightGBM (quantile regression)",
                 "PuLP + HiGHS mixed-integer solver · SciPy · Parquet cache · pytest",
                 "ERA5 reanalysis (Copernicus, via an open archive API — no credentials, cached offline)",
-                "Offline single-file HTML console (Plotly inlined) · Modbus + MQTT setpoint interface",
+                "Web console: React · Emotion · Motion, built for offline use · Modbus + MQTT setpoint interface",
             ]),
             ("Methodology and process for implementation", [
-                f"Closed-loop simulation of a {fnum(f['days'])}-day season ({f['season']}), "
-                f"re-optimised on a {f['horizon_h']} h rolling horizon",
+                f"Closed-loop simulation scored over {fnum(f['scored_days'])} days ({f['season']}, after a "
+                f"48 h warm-up), re-optimised on a {f['horizon_h']} h rolling horizon",
                 "Four controllers on identical weather: fixed schedule, tuned rule-based, ours, "
                 "perfect-foresight oracle — plus a point-forecast ablation",
                 "Stress tests: four-day blizzard, 48 h genset failure, 12 h badly wrong forecast",
@@ -528,7 +529,7 @@ def build(team: str, team_id: str, repo: str) -> Path:
                 "Margin over a well-tuned rule-based controller can be modest",
             ]),
             ("Strategies for overcoming these challenges", [
-                "Load synthesised bottom-up from physics, never drawn; calibrated to published "
+                "Load modelled bottom-up from physics, never drawn; checked against published "
                 "Antarctic station fuel-demand shapes",
                 f"All {fnum(f['n_assumptions'])} parameters carry source, confidence and a sensitivity "
                 "range, shown in an Assumptions tab in the demo",

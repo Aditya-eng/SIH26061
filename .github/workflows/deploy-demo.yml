@@ -1,4 +1,4 @@
-name: Deploy demo to GitHub Pages
+name: Deploy console to GitHub Pages
 
 on:
   push:
@@ -29,12 +29,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      # the demo is dependency-free: no npm install step exists or is needed
-      - name: Simulation tests
+      - run: npm ci
+
+      - name: Data integrity and no-synthetic-data checks
         run: npm test
 
-      - name: Validate assets and the precomputed example
+      - name: Build the console
         run: npm run build
 
       # enablement: true provisions GitHub Pages for the repository if it has not

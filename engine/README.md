@@ -140,7 +140,7 @@ The difference between `C` and `C-point` is the answer to "why do you need AI at
 | pvlib | irradiance decomposition, plane-of-array transposition, cell temperature | real physics |
 | COMNAP / NCPOR station records | headcount, station function | real |
 | de Witt, Chung & Lee 2024 (Sustainability 16(1) 426) | polar energy facts: winter peak, de-icing cost, exhaust contamination, cold-density gain | real, open access |
-| Electrical load | **synthetic**, bottom-up from headcount and outdoor temperature | no public polar station load data exists — say so before being asked |
+| Electrical load | **modelled**, bottom-up from headcount and outdoor temperature (one fixed pseudo-random component, disclosed) | no public polar station load data exists — say so before being asked |
 
 If the CDS ERA5 API is ever wanted instead, swap `weather.fetch_year`; everything downstream
 is indifferent. `data/cache/` makes the whole pipeline runnable with the network down.
@@ -183,7 +183,7 @@ entire argument of the submission.
 
 1. **We grade our own homework.** The same team wrote the simulator and the controller.
    Mitigations: a strong baseline, an oracle bound, an ablation, and a sensitivity table.
-2. **No real load data exists** for any polar research station. The load is synthetic and
+2. **No real load data exists** for any polar research station. The load is modelled and
    physics-driven; the Assumptions tab is the defence, and it is one click away in the demo.
 3. **Maitri II is not yet designed**, so generator, PV and turbine ratings are speculative.
    That is why the deliverable is framed as a sizing and operating-policy explorer for a station

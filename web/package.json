@@ -1,1 +1,28 @@
-{"name":"pink-monster-polar-ems","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"node scripts/serve.mjs","start":"node scripts/serve.mjs","build":"node scripts/check.mjs","test":"node --test tests/*.test.mjs"},"engines":{"node":">=20"}}
+{
+  "name": "himshakti-console",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SIH26061 - polar station fuel-survivability console. Shows only the real engine's outputs: ERA5 weather, physics twin, optimised dispatch.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 3000",
+    "test": "node --test \"tests/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "motion": "^14.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.2"
+  }
+}

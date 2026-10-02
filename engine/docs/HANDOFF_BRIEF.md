@@ -168,7 +168,8 @@ models = era5   timezone = UTC   years = 2015–2023
 ### The data gap that defines the project
 
 **No public electrical load data exists for any polar research station.** Load is therefore
-synthetic — built bottom-up from physics, never drawn — and we say so before being asked.
+modelled — built bottom-up from physics, never drawn — and we say so before being asked. The model
+includes one fixed pseudo-random component (domestic ±8%, workshop 40–100% of peak, hour to hour).
 Proxies available for shape calibration if wanted:
 
 - Building Data Genome Project 2 — `https://github.com/buds-lab/building-data-genome-project-2`
@@ -245,7 +246,7 @@ Key values (all with sensitivity ranges in the file):
 
 **The tank is calibrated, not chosen.** `calibrate.py` runs baseline B over a full year with an
 effectively unlimited tank (it burns 111,314 L, 0 critical outages) and over the 210-day demo
-season (73,719 L). The configured tank is 72,000 L ≈ 0.98× the season burn, so survivability is
+window (73,719 L). The configured tank is 72,000 L ≈ 0.98× the season burn, so survivability is
 genuinely at stake. This is disclosed as a DESIGN CHOICE in the config and in the pitch.
 
 ## 7. The model, in detail
@@ -354,7 +355,10 @@ Outer level of the two-level problem.
 
 Reported: `P(run dry)` under heuristic operation across the ensemble, mean-year need, worst-year
 need, and whether the allocation is binding. In the current configuration it *is* binding:
-66,000 L usable against a 72,024 L mean-year need and 132,303 L at the P99 year.
+66,000 L usable against a 72,024 L mean-year need (worst year 81,046 L). The sum of per-day 99th
+percentiles is 132,303 L — an envelope no single year reaches, NOT a 'P99 year'. The allocation
+was therefore scaled to 50% of that envelope, and 7 of 8 ensemble years (87.5%) run dry under
+heuristic operation: the 99% figure is a target this tank cannot honour.
 
 ### 7.6 MILP dispatch (`dispatch.py`)
 
@@ -448,7 +452,8 @@ is the next step, not a rewrite.
 
 ## 8. Results
 
-Season 2023-02-01 → 2023-08-30 (210 days, 5,041 h), tank 72,000 L, reserve floor 6,000 L,
+Window 2023-02-01 → 2023-08-30 (210 days, 5,041 h; the first 48 h are warm-up, so controllers are
+scored over 4,993 h = 208 days), tank 72,000 L, reserve floor 6,000 L,
 36 h horizon, 6 h control step, identical weather for every controller.
 
 | Controller | Fuel (L) | vs B | Critical outages (events / kWh) | Renewable used | Clean-air compliance | Starts |
@@ -485,10 +490,10 @@ Forecast skill, walk-forward on the unseen test year:
 Calibration (coverage ≈ nominal) is the property the reserve rule actually consumes, and is the
 number we lead with rather than MAE.
 
-Seasonal allocator, this configuration: 66,000 L usable, mean-year need 72,024 L, P99-year need
-132,303 L, allocation **binding**.
+Seasonal allocator, this configuration: 66,000 L usable, mean-year need 72,024 L, worst year
+81,046 L, per-day-P99 envelope 132,303 L (not a year), allocation **binding** and scaled to 50%.
 
-Sizing sweep (`sizing.py`, Monte Carlo only, 8 weather years, 210-day season): at the configured
+Sizing sweep (`sizing.py`, Monte Carlo only, 8 weather years, 210-day window): at the configured
 tank, the smallest swept configuration that never runs dry is 80 kWp PV / 180 kW wind / 400 kWh
 battery (~53,147 L per season mean); the configured 120/90/400 runs dry in 88% of weather years
 under heuristic operation.
@@ -553,7 +558,7 @@ single VM.
    no warm start), symmetry breaking, coarser resolution beyond hour 24, or a rolling LP with
    integer variables only in the first 12 hours?
 9. **Validation without ground truth.** What is the strongest defensible validation protocol for
-   a synthetic twin in this setting, beyond "three qualitative signals emerge that we did not
+   a modelled twin in this setting, beyond "three qualitative signals emerge that we did not
    fit"?
 10. **The pitch.** Given §1 (one-sentence PS, non-specialist panel, five minutes), is
     "fuel survivability + science integrity" the right lead, or is there a stronger framing we

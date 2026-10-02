@@ -19,7 +19,7 @@ projectors and Wi-Fi all fail at hour 34.
 | 1:45–2:30 | Stress tests tab, blizzard block | Four days, no solar, turbines cut out on overspeed, heat demand up. Unserved critical energy, both controllers. Degradation, not collapse. |
 | 2:30–3:15 | Demo week tab | The shaded bands are clean-air windows: forecast wind would carry exhaust to the sampling inlet. Watch the diesel band go to zero across them while the battery carries the load. |
 | 3:15–4:15 | Results tab | Against the **tuned** baseline, not the strawman: fuel margin, critical outages, clean-air compliance, and the fraction of the gap to a perfect-foresight oracle that we close. Then the ablation row — same optimiser, point forecast instead of quantiles. That row is the answer to "why AI". |
-| 4:15–5:00 | Assumptions tab, filter to **Assumptions only** | No public electrical load data exists for any polar station. Ours is synthetic, built bottom-up from headcount and outdoor temperature. Here is every parameter, its source, its confidence and its sensitivity range. |
+| 4:15–5:00 | Assumptions tab, filter to **Assumptions only** | No public electrical load data exists for any polar station. Ours is modelled, built bottom-up from headcount and outdoor temperature. Here is every parameter, its source, its confidence and its sensitivity range. |
 
 End on the Assumptions tab. Naming your own weakness before a judge does is worth more than
 any extra feature.
@@ -41,7 +41,7 @@ resupply as a hard survivability constraint, and none models exhaust contaminati
 station's own instruments. Those two constraints are the product.
 
 **"Where did your data come from?"**
-Weather is real ERA5 at Maitri's coordinates, hourly, eight years. Load is synthetic and we
+Weather is real ERA5 at Maitri's coordinates, hourly, eight years. Load is modelled and we
 say so before being asked: bottom-up from headcount, envelope heat loss and snow-melt water.
 *(Open the Assumptions tab. This is the strongest moment in the demo — rehearse it.)*
 

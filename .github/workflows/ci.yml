@@ -31,7 +31,10 @@ jobs:
       - name: Unit tests
         run: python -m pytest tests -q
 
-      # Deliberately NOT the 210-day season: that takes ~45-60 min because every
+      - name: Every published number matches the pipeline
+        run: python verify_data.py
+
+      # Deliberately NOT the full 210-day window: that takes ~45-60 min because every
       # control step is a real MILP solve. This is a short smoke run that proves the
       # pipeline is wired end to end. The committed ERA5 Parquet cache means it needs
       # no network. Reproduce the full season locally with `python run.py --days 210`.
@@ -51,7 +54,7 @@ jobs:
           if-no-files-found: warn
 
   web:
-    name: Demo
+    name: Web console
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -63,7 +66,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - run: npm test
+      - run: npm ci
+
+      - name: Data integrity and no-synthetic-data checks
+        run: npm test
 
       - run: npm run build

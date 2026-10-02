@@ -1,4 +1,4 @@
-# SIH26061 — Polar station energy management
+# SIH26061 — HIMSHAKTI: polar station fuel survivability
 
 **Smart India Hackathon 2026 · Problem Statement SIH26061 · Ministry of Earth Sciences (MoES) /
 National Centre for Polar and Ocean Research (NCPOR) · Software · Clean & Green Technology**
@@ -8,9 +8,9 @@ National Centre for Polar and Ocean Research (NCPOR) · Software · Clean & Gree
 > official problem statement.
 
 [![CI](https://github.com/Aditya-eng/SIH26061/actions/workflows/ci.yml/badge.svg)](https://github.com/Aditya-eng/SIH26061/actions/workflows/ci.yml)
-[![Deploy demo](https://github.com/Aditya-eng/SIH26061/actions/workflows/deploy-demo.yml/badge.svg)](https://github.com/Aditya-eng/SIH26061/actions/workflows/deploy-demo.yml)
+[![Deploy console](https://github.com/Aditya-eng/SIH26061/actions/workflows/deploy-demo.yml/badge.svg)](https://github.com/Aditya-eng/SIH26061/actions/workflows/deploy-demo.yml)
 
-**Live demo:** https://aditya-eng.github.io/SIH26061/ *(published by GitHub Actions from `web/dist`)*
+**Live console:** https://aditya-eng.github.io/SIH26061/
 
 ---
 
@@ -20,132 +20,137 @@ A polar research station receives **one fuel delivery a year**. Its renewables a
 and physically fragile, its largest loads are thermal and peak exactly when generation is worst,
 and **its own diesel exhaust contaminates the atmospheric measurements the station exists to
 collect**. So the objective is not minimum cost per kWh — every commercial microgrid EMS already
-does that — it is *maximise the probability of serving critical load until the ship returns*,
-subject to not poisoning your own science. That reframing is the project.
+does that — it is *keep critical load served until the ship returns*, without poisoning your own
+science. That reframing is the project.
 
 Forecasting, MILP dispatch, battery scheduling and critical-load prioritisation are all built
-here, because the system needs them. They are **table stakes**, not the innovation: ABB,
-Schneider, Siemens, SMA and HOMER ship that feature list today.
+here, because the system needs them. They are table stakes, not the innovation: ABB, Schneider,
+Siemens, SMA and HOMER ship that feature list today.
 
-## Two codebases, and the difference between them matters
+## Two parts, one set of numbers
 
 | | [`engine/`](engine/) | [`web/`](web/) |
 |---|---|---|
-| What it is | The real pipeline: physics digital twin, quantile forecasts, MILP/MPC dispatch under a Monte Carlo seasonal fuel allocation | "Pink Monster" — a dependency-free browser demo of the same workflow, for the internal round |
-| Weather | **Real ERA5 reanalysis**, hourly, 9 years, at Maitri's coordinates (−70.7667, 11.7333) | **Seeded synthetic** weather and synthetic forecast ranges |
-| Optimiser | MILP over a 36 h rolling horizon (PuLP + HiGHS) | Beam search, width 14, 36 h horizon |
-| Numbers below | Measured from a full 210-day season | Illustrative — the demo does not claim validated performance |
-| Runs | `python run.py` | opens in a browser, offline |
+| What it is | The pipeline: physics model of the station, LightGBM quantile forecasts, MILP/MPC dispatch under a Monte Carlo seasonal fuel allocation | The public console: React + Emotion + Motion |
+| Weather | **ERA5 reanalysis**, hourly, 9 years, Maitri (−70.7667, 11.7333) | the same — exported from the engine |
+| Numbers | computed by closed-loop runs | **displayed only** — the console computes nothing and contains no synthetic data |
 
-**Read that row about weather twice before quoting any number.** The demo's figures are
-illustrative; the engine's are measured against real reanalysis on a documented twin. Do not mix
-them in a pitch.
+The console reads three JSON files written by `engine/export_web_data.py`; `engine/verify_data.py`
+cross-checks every published figure against the run and fails CI on any mismatch.
 
-## Results — engine, 210-day season (2023-02-01 → 2023-08-30)
+**What is measured and what is modelled.** The weather is measured (reanalysis). Station
+electricity use is *modelled*, because no polar station publishes its load data: it is built from
+headcount, envelope heat loss, snow-melt water and a 24/7 science load. The model includes one
+disclosed, fixed pseudo-random component — hour-to-hour domestic (±8%) and workshop (40–100% of
+peak) variation — so runs are reproducible. Forecast errors are simulated by degrading the
+reanalysis with lead-time-dependent noise, because a reanalysis is a hindcast, not a forecast.
 
-Identical weather, identical station, identical physical resolver for every controller. Tank
-72,000 L, deliberately sized so the season is marginal (see `engine/calibrate.py`).
+## Results — 2023 winter
 
-| Controller | Fuel (L) | vs B | Critical outages | Renewable used | Clean-air compliance |
-|---|---|---|---|---|---|
-| A — fixed schedule | 72,000 (**dry**) | — | 36 events / 9,266 kWh | 69.1% | 40.5% |
-| B — tuned rule-based | 72,000 (**dry**) | 0% | 6 events / 328 kWh | 84.8% | 27.4% |
-| **C — proposed** | **63,385** | **−12.0%** | **0 events / 0 kWh** | 92.5% | 43.7% |
-| C-point — ablation | 63,280 | −12.1% | 1 event / 8 kWh | 92.7% | 43.3% |
-| D — perfect-foresight oracle | 62,485 | −13.2% | 0 events / 0 kWh | 93.5% | 49.0% |
+Window 2023-02-01 → 2023-08-30; the first 48 hours are warm-up, so every controller is **scored
+over 4,993 hours (208 days)**. Identical weather, station and physical resolver for all. Tank
+72,000 L, deliberately sized so the season is marginal (`engine/calibrate.py`), with a 6,000 L
+emergency reserve.
 
-C closes **91%** of the gap between the tuned baseline and the perfect-foresight bound. Both
-baselines empty the tank before the season ends; C finishes above the emergency reserve.
+| Controller | Diesel (L) | vs B | Critical failures | Critical energy lost | Renewables used | Clean-air hours kept |
+|---|---|---|---|---|---|---|
+| A — fixed schedule | 72,000 (**ran dry**) | — | 36 | 9,266.6 kWh | 69.1% | 40.5% |
+| B — tuned rule-based | 72,000 (**ran dry**) | 0% | 6 | 328.4 kWh | 84.8% | 27.4% |
+| **C — HIMSHAKTI** | **63,384.7** | **−12.0%** | **0** | **0.0 kWh** | 92.5% | 43.7% |
+| C-point — no uncertainty | 63,279.6 | −12.1% | 1 | 8.3 kWh | 92.7% | 43.3% |
+| D — perfect foresight | 62,484.6 | −13.2% | 0 | 0.0 kWh | 93.5% | 49.0% |
 
-Stress tests (C against baseline B, same season):
+HIMSHAKTI closes **91%** of the gap between the tuned baseline and the perfect-foresight ceiling.
+Both baselines empty the tank (the rule-based one on 21 August); HIMSHAKTI finishes with 8,615 L.
 
-| Scenario | B unserved critical | C unserved critical |
+| Stress test (same window) | B — critical energy lost | C — critical energy lost |
 |---|---|---|
-| Four-day blizzard | 809.1 kWh / 8 events | **0.0 kWh / 0 events** |
-| Primary genset down 48 h in deep winter | 325.8 kWh / 3 events | 97.9 kWh / 1 event |
-| 12 h badly wrong forecast, truth unchanged | — | 0.0 kWh, fuel within 12 L of nominal |
+| Four-day blizzard | 809.1 kWh / 8 failures | **0.0 kWh / 0** |
+| 125 kW generator out for 48 h | 325.8 kWh / 3 failures | 97.9 kWh / 1 failure |
+| 12 h badly wrong forecast | — | 0.0 kWh; fuel 63,373 L vs 63,385 L |
 
-Forecast skill on the unseen test year: load MAE 1.82 kW (2.2% MAPE), PV 3.01 kW (12.1%), wind
-6.53 kW (20.0%), with p90 coverage 89–93%. **Calibration, not MAE, is the number that matters** —
-the optimiser sizes its reserve from the predicted spread.
+Forecast skill on the unseen 2023 year: load MAE 1.82 kW (2.2%), solar 3.01 kW (12.1%), wind
+6.53 kW (20.0%); the p90 band contains the truth in 89–93% of hours.
+
+### The fuel budget — what it can and cannot promise
+
+The seasonal allocator **targets** critical load served until the ship in 99% of past winters.
+With this tank it cannot meet that target: the per-day 99th-percentile allowance sums to
+132,303 L (an envelope no single winter reaches — the worst of the eight needs 81,046 L), so it is
+scaled to 50% to fit the 66,000 L usable. Under a simple operating rule, 7 of 8 past winters
+(87.5%) would run dry. The 2023 result above is one winter, not a guarantee.
 
 ## What makes this polar rather than generic
 
 1. **Resupply-horizon fuel budgeting** (`engine/src/polarems/fuelbudget.py`) — a Monte Carlo
-   allocator over 8 historical weather years sets a daily litre allowance holding
-   `P(critical load served to the ship) ≥ 99%`; the MILP prices every litre beyond it, with
-   carry-over between horizons. No commercial EMS optimises against a single annual resupply.
-2. **Science-integrity-constrained dispatch** (`engine/src/polarems/cleanair.py`) — when
-   *forecast* wind would carry exhaust into the clean-air sampling sector, generator hours are
-   priced and the battery carries the window. Modelled by no EMS product.
+   allocator over eight ERA5 winters sets a daily litre allowance; the MILP prices every litre
+   beyond it, with carry-over between horizons. No commercial EMS optimises against a single
+   annual resupply.
+2. **Science-integrity dispatch** (`engine/src/polarems/cleanair.py`) — when *forecast* wind
+   would carry exhaust toward the clean-air sampling sector, generator hours are priced and the
+   battery carries the window.
 3. **Physical-availability forecasting** (`engine/src/polarems/availability.py`) — snow cover and
-   blade icing are state variables that decorrelate from the weather forecast: the forecast can
-   say clear sky while the array is under drift.
+   blade icing are state variables that decorrelate from the weather forecast.
 
 ## Running it
 
 ```bash
-# demo — needs only Node >= 20, no install, no network
-cd web && npm run dev        # http://localhost:3000
+# console — Node >= 20
+cd web && npm ci && npm run dev          # http://localhost:5173
 npm test && npm run build
 
 # engine — Python 3.12+
 cd engine
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # Linux/macOS: .venv/bin/pip
-.venv/Scripts/python -m pytest tests -q                                 # 14 tests, ~2 s
-.venv/Scripts/python run.py --days 30 --no-scenarios --controllers A,B,C  # ~4 min sanity run
-.venv/Scripts/python run.py --days 210                                  # full season, ~45-60 min
+.venv/Scripts/python -m pytest tests -q          # 14 tests
+.venv/Scripts/python verify_data.py              # cross-checks every published number
+.venv/Scripts/python run.py --days 210           # full window, ~75 min
+.venv/Scripts/python export_web_data.py          # refresh the console's data
 ```
 
-The ERA5 Parquet cache is committed, so both the tests and the pipeline run **with the network
-down** — which is the station's actual operating condition, and part of the pitch.
-
-Outputs land in `engine/results/run.json`, `engine/results/metrics.csv` and
-`engine/dashboard/dashboard.html` (a single self-contained file — Plotly is inlined, so it opens
-by double-click and works offline).
+The ERA5 Parquet cache is committed, so tests, the pipeline and the console all work offline.
 
 ## Continuous integration
 
-- **`ci.yml`** — runs the engine's unit tests plus a deliberately short **14-day** smoke run
-  (three controllers, no scenarios) to prove the pipeline is wired end to end, and runs the
-  demo's tests and asset checks. It does **not** run the 210-day season: that is ~45–60 minutes
-  of real MILP solves and belongs on a workstation, not on a CI runner. Reproduce it locally.
-- **`deploy-demo.yml`** — publishes `web/dist` to GitHub Pages on every push that touches `web/`.
-  Requires **Settings → Pages → Source: GitHub Actions** to be enabled once.
+- **`ci.yml`** — engine unit tests, `verify_data.py`, and a short 14-day smoke run (never the full
+  window — that is ~75 minutes of MILP solves); console tests (data integrity, no synthetic
+  generators in the source) and production build.
+- **`deploy-demo.yml`** — tests, builds and publishes the console to GitHub Pages on every push to
+  `main`.
 
 ## Repository map
 
 ```
-engine/                     the real pipeline
+engine/                     the pipeline
   config/station.json       every physical number with source, confidence, sensitivity range
   src/polarems/             weather, twin, availability, cleanair, forecast, fuelbudget,
                             dispatch, controllers, harness, metrics, scenarios, setpoints, report
-  run.py                    whole pipeline, one command
-  calibrate.py sizing.py sensitivity.py watch_ps.py emit_setpoints.py make_ppt.py
-  dashboard/                offline single-file console (template + generated output)
+  run.py  calibrate.py  sizing.py  sensitivity.py  watch_ps.py  emit_setpoints.py  make_ppt.py
+  export_web_data.py        writes the console's data from results/run.json + the ERA5 twin
+  verify_data.py            cross-checks every published number
   data/cache/               committed ERA5 Parquet, 2015-2023
-  results/                  the 210-day run: run.json, metrics.csv
-  submission/               SIH idea deck (pptx + pdf) generated from results/run.json
-  docs/                     demo script + adversarial Q&A, findings, external handoff brief
-  tests/                    14 tests over physics, geometry, the resolver and the MILP
-web/                        the Pink Monster browser demo
-  dist/                     the deployable application (this is what Pages serves)
-  scripts/ tests/ docs/
+  results/                  run.json, metrics.csv (the 2023 window)
+  submission/               SIH idea deck (pptx + pdf), generated from results/run.json
+  docs/                     demo script + Q&A, findings, external review brief
+web/                        the console (React, Emotion, Motion)
+  src/                      views/, components/ (ui.jsx, charts.jsx), theme.js, data.js
+  public/data/              season.json, station.json, sizing.json - exported, never hand-edited
+  tests/                    data-integrity tests
 ```
 
 ## Honest limitations
 
-- **No public electrical-load data exists for any polar research station.** The load is
-  synthetic, built bottom-up from headcount and outdoor temperature, and every parameter carries
-  its source and a sensitivity range in `engine/config/station.json`, surfaced in the dashboard's
-  Assumptions tab.
-- **The same team wrote the simulator and the controller.** Mitigations: a genuinely tuned
-  baseline B (zero critical outages over a full year with an unconstrained tank), a
-  perfect-foresight oracle bound, and a published ablation.
-- **Maitri II ratings are not public**, so the deliverable is framed as a sizing and
-  operating-policy explorer for a station still on the drawing board.
+- **No public electrical-load data exists for any polar station.** Loads are modelled; every
+  parameter carries its source and a sensitivity range (Assumptions table on the console).
+- **The same team wrote the simulator and the controller.** Mitigations: a tuned baseline B
+  (zero critical failures over a full year with an unconstrained tank), a perfect-foresight
+  ceiling, and a published ablation (C-point).
+- **One test winter, one seed.** No confidence intervals yet.
+- **The 99% survival target is not met by this tank** — see the fuel-budget section.
+- **Maitri II ratings are not public**, so the work is framed as a sizing and operating-policy
+  explorer for a station still on the drawing board.
 - **No hardware in the loop.** `engine/emit_setpoints.py` emits Modbus registers and MQTT
-  messages, but nothing has been tested against a real genset controller.
+  messages; nothing has been tested against a real generator controller.
 
 ## References
 
